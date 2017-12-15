@@ -114,6 +114,8 @@ defmodule ExAws.Auth do
       nil -> "UNSIGNED-PAYLOAD"
       _ -> ExAws.Auth.Utils.hash_sha256(body)
     end
+    
+    payload = "UNSIGNED-PAYLOAD"
 
     [
       http_method, "\n",
