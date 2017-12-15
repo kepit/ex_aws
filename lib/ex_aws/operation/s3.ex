@@ -30,7 +30,7 @@ defmodule ExAws.Operation.S3 do
       |> add_resource_to_params
       |> ExAws.Request.Url.build(config)
 
-      hashed_payload = ExAws.Auth.Utils.hash_sha256(body)
+      hashed_payload = "UNSIGNED-PAYLOAD"
 
       headers = headers
       |> Map.put("x-amz-content-sha256", hashed_payload)
