@@ -110,10 +110,10 @@ defmodule ExAws.Auth do
     |> Keyword.keys
     |> Enum.join(";")
 
-    payload = case body do
-      nil -> "UNSIGNED-PAYLOAD"
-      _ -> ExAws.Auth.Utils.hash_sha256(body)
-    end
+#    payload = case body do
+#      nil -> "UNSIGNED-PAYLOAD"
+#      _ -> ExAws.Auth.Utils.hash_sha256(body)
+#    end
     
     payload = "UNSIGNED-PAYLOAD"
 
