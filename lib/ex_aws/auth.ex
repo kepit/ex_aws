@@ -175,11 +175,15 @@ defmodule ExAws.Auth do
 
     signed_headers_list = signed_headers_value(headers)
 
-    payload =
-      case body do
-        nil -> "UNSIGNED-PAYLOAD"
-        _ -> ExAws.Auth.Utils.hash_sha256(body)
-      end
+    # payload =
+    #   case body do
+    #     nil -> "UNSIGNED-PAYLOAD"
+    #     _ -> ExAws.Auth.Utils.hash_sha256(body)
+    #   end
+
+    payload = "UNSIGNED-PAYLOAD"
+
+    
 
     [
       http_method,
