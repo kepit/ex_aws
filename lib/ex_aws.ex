@@ -1,6 +1,6 @@
 defmodule ExAws do
   @moduledoc """
-  Module for making and processing AWS request
+  Module for making and processing AWS requests.
   """
 
   use Application
@@ -8,7 +8,7 @@ defmodule ExAws do
   @behaviour ExAws.Behaviour
 
   @doc """
-  Perform an AWS request
+  Perform an AWS request.
 
   First build an operation from one of the services, and then pass it to this
   function to perform it.
@@ -62,11 +62,13 @@ defmodule ExAws do
 
     * `:result` - the request result: `:ok` or `:error`
     * `:attempt` - the attempt number
+    * `:service` - the AWS service
     * `:options` - extra options given to the repo operation under
       `:telemetry_options`
 
   """
   @impl ExAws.Behaviour
+  @spec request(ExAws.Operation.t(), keyword) :: {:ok, term} | {:error, term}
   def request(op, config_overrides \\ []) do
     ExAws.Operation.perform(op, ExAws.Config.new(op.service, config_overrides))
   end
@@ -78,6 +80,7 @@ defmodule ExAws do
   AWS or raise an exception.
   """
   @impl ExAws.Behaviour
+  @spec request!(ExAws.Operation.t(), keyword) :: term
   def request!(op, config_overrides \\ []) do
     case request(op, config_overrides) do
       {:ok, result} ->
@@ -101,6 +104,7 @@ defmodule ExAws do
 
   """
   @impl ExAws.Behaviour
+  @spec stream!(ExAws.Operation.t(), keyword) :: Enumerable.t()
   def stream!(op, config_overrides \\ []) do
     ExAws.Operation.stream!(op, ExAws.Config.new(op.service, config_overrides))
   end
@@ -109,7 +113,8 @@ defmodule ExAws do
   @impl Application
   def start(_type, _args) do
     children = [
-      ExAws.Config.AuthCache
+      {ExAws.Config.AuthCache, [name: ExAws.Config.AuthCache]},
+      {ExAws.InstanceMetaTokenProvider, [name: ExAws.InstanceMetaTokenProvider]}
     ]
 
     opts = [strategy: :one_for_one, name: ExAws.Supervisor]

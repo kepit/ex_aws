@@ -3,10 +3,10 @@ defmodule ExAws.Operation.S3Test do
 
   alias Elixir.ExAws.Operation.ExAws.Operation.S3
 
-  def s3_operation() do
+  def s3_operation(bucket \\ "my-bucket-1") do
     %ExAws.Operation.S3{
       body: "",
-      bucket: "my-bucket-1",
+      bucket: bucket,
       headers: %{},
       http_method: :get,
       params: [],
@@ -38,7 +38,7 @@ defmodule ExAws.Operation.S3Test do
     assert(processed_operation.path == "/#{operation.bucket}#{operation.path}")
   end
 
-  test "S3 adds buck to path when virtual_host is true" do
+  test "S3 adds bucket to path when virtual_host is true" do
     config = ExAws.Config.new(:s3) |> Map.put(:virtual_host, true)
     operation = s3_operation()
 
@@ -46,6 +46,15 @@ defmodule ExAws.Operation.S3Test do
 
     assert(processed_config.host == "#{operation.bucket}.#{config.host}")
     assert(processed_operation.path == operation.path)
+  end
+
+  test "S3 raises when bucket is nil" do
+    config = ExAws.Config.new(:s3)
+    operation = s3_operation(nil)
+
+    assert_raise RuntimeError,
+                 "#{S3}.perform/2 cannot perform operation on `nil` bucket",
+                 fn -> S3.add_bucket_to_path(operation, config) end
   end
 
   test "ensure paths with . and .. are correctly resolved" do
@@ -70,5 +79,25 @@ defmodule ExAws.Operation.S3Test do
 
     {processed_operation, _processed_config} = S3.add_bucket_to_path(operation, config)
     assert processed_operation.path == "/folder/"
+  end
+
+  test "S3 uses bucket as host when both virtual_host and bucket_as_host are true" do
+    config = ExAws.Config.new(:s3) |> Map.put(:virtual_host, true) |> Map.put(:bucket_as_host, true)
+    operation = s3_operation("my-custom-domain.com")
+
+    {processed_operation, processed_config} = S3.add_bucket_to_path(operation, config)
+
+    assert(processed_config.host == "my-custom-domain.com")
+    assert(processed_operation.path == "/folder")
+  end
+
+  test "S3 uses standard virtual host when virtual_host is true but bucket_as_host is false" do
+    config = ExAws.Config.new(:s3) |> Map.put(:virtual_host, true) |> Map.put(:bucket_as_host, false)
+    operation = s3_operation()
+
+    {processed_operation, processed_config} = S3.add_bucket_to_path(operation, config)
+
+    assert(processed_config.host == "#{operation.bucket}.#{ExAws.Config.new(:s3).host}")
+    assert(processed_operation.path == "/folder")
   end
 end

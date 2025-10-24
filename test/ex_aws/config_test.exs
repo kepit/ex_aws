@@ -42,7 +42,7 @@ defmodule ExAws.ConfigTest do
     profile = "default"
 
     Mox.expect(ExAws.Credentials.InitMock, :security_credentials, 1, fn ^profile ->
-      %{region: "eu-west-1"}
+      {:ok, %{region: "eu-west-1"}}
     end)
 
     config = ExAws.Config.awscli_auth_credentials(profile, ExAws.Credentials.InitMock)
@@ -105,5 +105,13 @@ defmodule ExAws.ConfigTest do
     assert :s3
            |> ExAws.Config.new(region: {:system, "AWS_REGION"})
            |> Map.get(:region) == region_value
+  end
+
+  test "headers are passed as provided" do
+    headers = [{"If-Match", "ABC"}]
+
+    assert :s3
+           |> ExAws.Config.new(headers: headers)
+           |> Map.get(:headers) == headers
   end
 end

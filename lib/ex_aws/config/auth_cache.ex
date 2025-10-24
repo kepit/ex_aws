@@ -7,6 +7,7 @@ defmodule ExAws.Config.AuthCache do
 
   @refresh_lead_time 300_000
   @instance_auth_key :aws_instance_auth
+  @pod_identity_auth_key :aws_pod_identity_auth
 
   defmodule AuthConfigAdapter do
     @moduledoc false
@@ -22,6 +23,11 @@ defmodule ExAws.Config.AuthCache do
   def get(config) do
     :ets.lookup(__MODULE__, @instance_auth_key)
     |> refresh_auth_if_required(config)
+  end
+
+  def get(:pod_identity, config) do
+    :ets.lookup(__MODULE__, @pod_identity_auth_key)
+    |> refresh_pod_identity_if_required(config)
   end
 
   def get(profile, expiration) do
@@ -46,6 +52,11 @@ defmodule ExAws.Config.AuthCache do
     {:reply, auth, ets}
   end
 
+  def handle_call({:refresh_pod_identity_auth, config}, _from, ets) do
+    auth = refresh_pod_identity_auth(config, ets)
+    {:reply, auth, ets}
+  end
+
   def handle_call({:refresh_awscli_config, profile, expiration}, _from, ets) do
     auth = refresh_awscli_config(profile, expiration, ets)
     {:reply, auth, ets}
@@ -56,14 +67,17 @@ defmodule ExAws.Config.AuthCache do
     {:noreply, ets}
   end
 
+  def handle_info({:refresh_pod_identity_auth, config}, ets) do
+    refresh_pod_identity_auth(config, ets)
+    {:noreply, ets}
+  end
+
   def handle_info({:refresh_awscli_config, profile, expiration}, ets) do
     refresh_awscli_config(profile, expiration, ets)
     {:noreply, ets}
   end
 
   def refresh_awscli_config(profile, expiration, ets) do
-    Process.send_after(self(), {:refresh_awscli_config, profile, expiration}, expiration)
-
     auth = ExAws.Config.awscli_auth_credentials(profile)
 
     auth =
@@ -72,12 +86,30 @@ defmodule ExAws.Config.AuthCache do
           auth
 
         adapter ->
-          adapter.adapt_auth_config(auth, profile, expiration)
+          attempt_credentials_refresh(adapter, auth, profile, expiration)
       end
 
+    Process.send_after(self(), {:refresh_awscli_config, profile, expiration}, expiration)
     :ets.insert(ets, {{:awscli, profile}, auth})
 
     auth
+  end
+
+  defp attempt_credentials_refresh(adapter, auth, profile, expiration, retries \\ 6) do
+    case adapter.adapt_auth_config(auth, profile, expiration) do
+      {:error, error} when retries == 1 ->
+        Process.send_after(self(), {:refresh_awscli_config, profile, expiration}, expiration)
+
+        raise "Could't get credentials from auth adapter after 6 retries, last error was #{inspect(error)}"
+
+      {:error, _error} ->
+        Process.sleep(:rand.uniform(5_000))
+        attempt_credentials_refresh(adapter, auth, profile, expiration, retries - 1)
+
+      # Always store a map on AuthCache
+      auth when is_map(auth) ->
+        auth
+    end
   end
 
   defp refresh_auth_if_required([], config) do
@@ -117,6 +149,50 @@ defmodule ExAws.Config.AuthCache do
     :ets.insert(ets, {@instance_auth_key, auth})
     Process.send_after(__MODULE__, {:refresh_auth, config}, next_refresh_in(auth))
     auth
+  end
+
+  defp refresh_pod_identity_if_required([], config) do
+    GenServer.call(__MODULE__, {:refresh_pod_identity_auth, config}, 30_000)
+  end
+
+  defp refresh_pod_identity_if_required([{_key, cached_auth}], config) do
+    if next_refresh_in(cached_auth) > 0 do
+      cached_auth
+    else
+      GenServer.call(__MODULE__, {:refresh_pod_identity_auth, config}, 30_000)
+    end
+  end
+
+  defp refresh_pod_identity_auth(config, ets) do
+    :ets.lookup(__MODULE__, @pod_identity_auth_key)
+    |> refresh_pod_identity_if_stale(config, ets)
+  end
+
+  defp refresh_pod_identity_if_stale([], config, ets) do
+    refresh_pod_identity_now(config, ets)
+  end
+
+  defp refresh_pod_identity_if_stale([{_key, cached_auth}], config, ets) do
+    if next_refresh_in(cached_auth) > @refresh_lead_time do
+      cached_auth
+    else
+      refresh_pod_identity_now(config, ets)
+    end
+  end
+
+  defp refresh_pod_identity_if_stale(_, config, ets), do: refresh_pod_identity_now(config, ets)
+
+  defp refresh_pod_identity_now(config, ets) do
+    # Only attempt pod identity if the environment is properly configured
+    if ExAws.PodIdentity.available?() do
+      auth = ExAws.PodIdentity.security_credentials(config)
+      :ets.insert(ets, {@pod_identity_auth_key, auth})
+      Process.send_after(__MODULE__, {:refresh_pod_identity_auth, config}, next_refresh_in(auth))
+      auth
+    else
+      # Return empty map if pod identity is not available
+      %{}
+    end
   end
 
   defp next_refresh_in(%{expiration: expiration}) do
