@@ -1,3 +1,11 @@
+v2.7.0 (2026-03-04)
+- Upgrade hackney to 3.x
+- Correctly handle pod identity authorization when using Req adapter
+
+v2.6.1 (2025-12-09)
+- Endpoint updates
+- Document security_token configuration requirement for instance roles
+
 v2.6.0 (2025-10-03)
 - Endpoint updates
 - Update to support OTP 28
